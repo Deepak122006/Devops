@@ -1,0 +1,293 @@
+// ============================================================
+// Jenkinsfile — DevSecOps CI/CD Pipeline
+// Flow: Checkout → Build → Test → SonarQube → Nexus → Docker
+//       → Trivy Scan → Cosign Sign → ECR Push → ArgoCD Deploy
+// ============================================================
+
+pipeline {
+    agent {
+        docker {
+            image 'maven:3.9.6-eclipse-temurin-21'
+            args  '-v /var/run/docker.sock:/var/run/docker.sock -u root'
+        }
+    }
+
+    options {
+        timestamps()
+        ansiColor('xterm')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 60, unit: 'MINUTES')
+    }
+
+    environment {
+        // AWS / ECR
+        AWS_REGION      = 'us-east-1'
+        AWS_ACCOUNT_ID  = '545586474227'
+        ECR_REGISTRY    = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        APP_NAME        = 'devsecops-app'
+        IMAGE_TAG       = "${BUILD_NUMBER}-${GIT_COMMIT.take(7)}"
+        FULL_IMAGE      = "${ECR_REGISTRY}/${APP_NAME}:${IMAGE_TAG}"
+        LATEST_IMAGE    = "${ECR_REGISTRY}/${APP_NAME}:latest"
+
+        // SonarQube
+        SONAR_HOST_URL  = "${env.SONAR_HOST_URL}"
+        SCANNER_HOME    = tool 'SonarQube Scanner'
+
+        // Git
+        GIT_REPO        = 'https://github.com/IdrisShaik/Devops_Project.git'
+        GIT_BRANCH      = 'main'
+
+        // Trivy thresholds
+        TRIVY_SEVERITY  = 'CRITICAL,HIGH'
+        TRIVY_EXIT_CODE = '1'
+    }
+
+    stages {
+
+        // ── Stage 1: Checkout ──────────────────────────────
+        stage('Checkout') {
+            steps {
+                checkout scm
+                echo "✅ Checked out branch: ${GIT_BRANCH} | Commit: ${GIT_COMMIT.take(7)}"
+            }
+        }
+
+        // ── Stage 2: Maven Build ───────────────────────────
+        stage('Build') {
+            steps {
+                dir('app') {
+                    sh '''
+                        echo "🔨 Building Spring Boot application..."
+                        mvn clean package -DskipTests -B --no-transfer-progress
+                        echo "✅ Build complete: $(ls target/*.jar)"
+                    '''
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'app/target/*.jar', fingerprint: true
+                }
+            }
+        }
+
+        // ── Stage 3: Unit Tests + JaCoCo Coverage ─────────
+        stage('Unit Tests') {
+            steps {
+                dir('app') {
+                    sh 'mvn test -B --no-transfer-progress'
+                }
+            }
+            post {
+                always {
+                    junit 'app/target/surefire-reports/*.xml'
+                    jacoco(
+                        execPattern:         'app/target/jacoco.exec',
+                        classPattern:        'app/target/classes',
+                        sourcePattern:       'app/src/main/java',
+                        minimumInstructionCoverage: '70'
+                    )
+                }
+            }
+        }
+
+        // ── Stage 4: SonarQube Analysis ───────────────────
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    dir('app') {
+                        sh '''
+                            mvn sonar:sonar \
+                              -Dsonar.projectKey=devsecops-app \
+                              -Dsonar.projectName="DevSecOps App" \
+                              -Dsonar.host.url=${SONAR_HOST_URL} \
+                              -B --no-transfer-progress
+                        '''
+                    }
+                }
+            }
+        }
+
+        // ── Stage 5: Quality Gate ──────────────────────────
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        // ── Stage 6: Publish to Nexus ──────────────────────
+        stage('Publish to Nexus') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'nexus-credentials',
+                    usernameVariable: 'NEXUS_USER',
+                    passwordVariable: 'NEXUS_PASS'
+                )]) {
+                    dir('app') {
+                        sh '''
+                            mvn deploy -DskipTests -B --no-transfer-progress \
+                              -Dusername=${NEXUS_USER} \
+                              -Dpassword=${NEXUS_PASS}
+                        '''
+                    }
+                }
+            }
+        }
+
+        // ── Stage 7: Build Docker Image ───────────────────
+        stage('Docker Build') {
+            steps {
+                sh '''
+                    echo "🐳 Building Docker image: ${FULL_IMAGE}"
+                    docker build \
+                      -t ${FULL_IMAGE} \
+                      -t ${LATEST_IMAGE} \
+                      -f app/Dockerfile app/
+                    echo "✅ Docker image built"
+                '''
+            }
+        }
+
+        // ── Stage 8: Trivy Security Scan ──────────────────
+        stage('Trivy Scan') {
+            steps {
+                sh '''
+                    echo "🔍 Scanning image with Trivy..."
+                    # Install Trivy if not present
+                    if ! command -v trivy &>/dev/null; then
+                        apt-get install -y wget apt-transport-https gnupg lsb-release
+                        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key \
+                          | gpg --dearmor > /usr/share/keyrings/trivy.gpg
+                        echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] \
+                          https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" \
+                          | tee /etc/apt/sources.list.d/trivy.list
+                        apt-get update && apt-get install -y trivy
+                    fi
+
+                    trivy image \
+                      --severity ${TRIVY_SEVERITY} \
+                      --exit-code ${TRIVY_EXIT_CODE} \
+                      --format table \
+                      --output trivy-report.txt \
+                      ${FULL_IMAGE}
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ── Stage 9: Cosign Image Signing ─────────────────
+        stage('Sign Image') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'cosign-private-key', variable: 'COSIGN_KEY_B64'),
+                    string(credentialsId: 'cosign-password',    variable: 'COSIGN_PASS')
+                ]) {
+                    sh '''
+                        echo "✍️ Signing Docker image with Cosign..."
+                        # Install cosign if not present
+                        if ! command -v cosign &>/dev/null; then
+                            VERSION=$(curl -s https://api.github.com/repos/sigstore/cosign/releases/latest \
+                              | grep tag_name | cut -d '"' -f 4)
+                            curl -fsSL \
+                              https://github.com/sigstore/cosign/releases/download/${VERSION}/cosign-linux-amd64 \
+                              -o /usr/local/bin/cosign
+                            chmod +x /usr/local/bin/cosign
+                        fi
+
+                        # Decode private key
+                        echo "$COSIGN_KEY_B64" | base64 -d > /tmp/cosign.key
+
+                        # ECR login
+                        aws ecr get-login-password --region ${AWS_REGION} | \
+                          docker login --username AWS --password-stdin ${ECR_REGISTRY}
+
+                        # Sign the image
+                        COSIGN_PASSWORD="${COSIGN_PASS}" cosign sign \
+                          --key /tmp/cosign.key \
+                          --yes \
+                          ${FULL_IMAGE}
+
+                        rm -f /tmp/cosign.key
+                        echo "✅ Image signed successfully"
+                    '''
+                }
+            }
+        }
+
+        // ── Stage 10: Push to ECR ─────────────────────────
+        stage('Push to ECR') {
+            steps {
+                sh '''
+                    echo "📤 Pushing to ECR..."
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                      docker login --username AWS --password-stdin ${ECR_REGISTRY}
+
+                    docker push ${FULL_IMAGE}
+                    docker push ${LATEST_IMAGE}
+                    echo "✅ Pushed: ${FULL_IMAGE}"
+                '''
+            }
+        }
+
+        // ── Stage 11: Update K8s Manifest & Trigger ArgoCD
+        stage('Update Manifest & Deploy') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'github-credentials',
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_TOKEN'
+                    ),
+                    string(credentialsId: 'argocd-token', variable: 'ARGOCD_TOKEN')
+                ]) {
+                    sh '''
+                        echo "📝 Updating k8s/deployment.yaml with new image tag..."
+                        git config --global user.email "jenkins@devsecops.local"
+                        git config --global user.name "Jenkins CI"
+
+                        # Update image tag in deployment manifest
+                        sed -i "s|image: .*devsecops-app:.*|image: ${FULL_IMAGE}|g" k8s/deployment.yaml
+
+                        # Commit and push
+                        git add k8s/deployment.yaml
+                        git commit -m "ci: update image to ${IMAGE_TAG} [skip ci]"
+                        git push https://${GIT_USER}:${GIT_TOKEN}@github.com/IdrisShaik/Devops_Project.git ${GIT_BRANCH}
+
+                        echo "✅ Manifest updated — ArgoCD will auto-sync within 3 min"
+                    '''
+                }
+            }
+        }
+
+    } // end stages
+
+    post {
+        success {
+            echo "🎉 Pipeline succeeded! Image: ${FULL_IMAGE}"
+            slackSend(
+                color: 'good',
+                message: """✅ *Build #${BUILD_NUMBER} SUCCEEDED*
+Branch: `${GIT_BRANCH}` | Commit: `${GIT_COMMIT.take(7)}`
+Image: `${FULL_IMAGE}`
+<${BUILD_URL}|View Build>"""
+            )
+        }
+        failure {
+            echo "❌ Pipeline failed."
+            slackSend(
+                color: 'danger',
+                message: """❌ *Build #${BUILD_NUMBER} FAILED*
+Branch: `${GIT_BRANCH}` | Commit: `${GIT_COMMIT.take(7)}`
+<${BUILD_URL}|View Build>"""
+            )
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

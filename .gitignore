@@ -1,0 +1,45 @@
+# .gitignore for DevSecOps Pipeline Project
+
+# ── Terraform ─────────────────────────────────────────────────
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfvars          # Contains AWS account IDs, keys - NEVER commit!
+*.tfvars.json
+
+# ── Maven / Java ──────────────────────────────────────────────
+app/target/
+*.class
+*.jar
+*.war
+
+# ── Cosign Keys ───────────────────────────────────────────────
+cosign/cosign.key   # NEVER commit private keys!
+cosign/*.password
+
+# ── Docker ────────────────────────────────────────────────────
+.docker/
+
+# ── Environment files ─────────────────────────────────────────
+.env
+.env.local
+*.env
+
+# ── Security scan reports (large, auto-generated) ─────────────
+trivy-report.txt
+trivy-results.sarif
+
+# ── IDE ───────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.swp
+.DS_Store
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Node (if adding frontend) ─────────────────────────────────
+node_modules/

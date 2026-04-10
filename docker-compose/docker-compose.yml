@@ -1,0 +1,141 @@
+# ============================================================
+# docker-compose.yml — Local CI Stack
+# Runs Jenkins, SonarQube, Nexus together
+# Usage: docker compose --env-file ../.env -f docker-compose.yml up -d
+# ============================================================
+
+version: "3.9"
+
+networks:
+  ci-network:
+    driver: bridge
+
+volumes:
+  jenkins_home:
+  sonarqube_data:
+  sonarqube_logs:
+  sonarqube_extensions:
+  sonarqube_db:
+  nexus_data:
+
+services:
+
+  # ── Jenkins ──────────────────────────────────────────────
+  jenkins:
+    image: jenkins/jenkins:lts-jdk21
+    container_name: jenkins
+    restart: unless-stopped
+    user: root
+    privileged: true
+    environment:
+      JAVA_OPTS: >-
+        -Djenkins.install.runSetupWizard=false
+        -Xmx2g
+      JENKINS_OPTS: "--prefix=/jenkins"
+      CASC_JENKINS_CONFIG: /var/jenkins_home/casc_configs
+      # Credentials passed via .env
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD}
+      AWS_REGION:             ${AWS_REGION}
+      AWS_ACCOUNT_ID:         ${AWS_ACCOUNT_ID}
+      GIT_USER:               ${GIT_USER}
+      GIT_TOKEN:              ${GIT_TOKEN}
+      SONAR_HOST_URL:         ${SONAR_HOST_URL}
+      SONAR_TOKEN:            ${SONAR_TOKEN:-placeholder}
+      NEXUS_URL:              ${NEXUS_URL}
+      NEXUS_DEPLOY_USER:      ${NEXUS_DEPLOY_USER}
+      NEXUS_DEPLOY_PASS:      ${NEXUS_DEPLOY_PASS}
+      ARGOCD_SERVER:          ${ARGOCD_SERVER:-placeholder}
+      ARGOCD_TOKEN:           ${ARGOCD_TOKEN:-placeholder}
+      SLACK_TOKEN:            ${SLACK_TOKEN:-placeholder}
+      COSIGN_PRIVATE_KEY_B64: ${COSIGN_PRIVATE_KEY_B64:-placeholder}
+    ports:
+      - "8080:8080"     # Jenkins Web UI
+      - "50000:50000"   # Agent JNLP
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock   # Docker-in-Docker access
+      - ../jenkins/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro
+      - ../jenkins/jenkins.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro
+    networks:
+      - ci-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ── SonarQube ─────────────────────────────────────────────
+  # WHY: Requires PostgreSQL for production-grade storage.
+  #      Do NOT use built-in H2 in any real environment.
+  sonarqube-db:
+    image: postgres:15-alpine
+    container_name: sonarqube-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       sonarqube
+      POSTGRES_USER:     sonar
+      POSTGRES_PASSWORD: ${SONAR_DB_PASSWORD:-sonarpass}
+    volumes:
+      - sonarqube_db:/var/lib/postgresql/data
+    networks:
+      - ci-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonar"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sonarqube:
+    image: sonarqube:10.4-community
+    container_name: sonarqube
+    restart: unless-stopped
+    depends_on:
+      sonarqube-db:
+        condition: service_healthy
+    environment:
+      SONAR_JDBC_URL:      jdbc:postgresql://sonarqube-db:5432/sonarqube
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: ${SONAR_DB_PASSWORD:-sonarpass}
+      SONAR_WEB_JAVAOPTS:  "-Xmx1g -Xms512m"
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonarqube_data:       /opt/sonarqube/data
+      - sonarqube_logs:       /opt/sonarqube/logs
+      - sonarqube_extensions: /opt/sonarqube/extensions
+    networks:
+      - ci-network
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/api/system/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # ── Nexus ─────────────────────────────────────────────────
+  nexus:
+    image: sonatype/nexus3:latest
+    container_name: nexus
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    volumes:
+      - nexus_data:/nexus-data
+    networks:
+      - ci-network
+    environment:
+      INSTALL4J_ADD_VM_PARAMS: >-
+        -Xms1g -Xmx2g
+        -XX:MaxDirectMemorySize=2g
+        -Djava.util.prefs.userRoot=/nexus-data/javaprefs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/service/rest/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s

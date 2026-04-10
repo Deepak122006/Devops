@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: devsecops-app
+  namespace: argocd
+  labels:
+    app: devsecops-app
+  # WHY: Finalizer ensures ArgoCD cleans up K8s resources when
+  #      the Application CRD is deleted (cascade delete)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: devsecops
+
+  source:
+    repoURL:        https://github.com/IdrisShaik/Devops_Project.git
+    targetRevision: main
+    path:           k8s   # ArgoCD watches the k8s/ folder
+
+  destination:
+    server:    https://kubernetes.default.svc
+    namespace: devsecops
+
+  syncPolicy:
+    # WHY: automated = ArgoCD syncs on every Git commit without manual approval
+    automated:
+      prune:     true   # Delete K8s resources removed from Git
+      selfHeal:  true   # Revert manual kubectl changes automatically
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - ApplyOutOfSyncOnly=true
+
+  # Retry on failure — tolerates transient issues (network, throttling)
+  retry:
+    limit: 5
+    backoff:
+      duration:    5s
+      factor:      2
+      maxDuration: 3m

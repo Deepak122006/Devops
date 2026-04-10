@@ -1,0 +1,111 @@
+# ============================================================
+# deployment.yaml — Spring Boot App Deployment
+# WHY: image tag is updated by Jenkins pipeline after each build.
+#      ArgoCD detects the commit and syncs automatically.
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devsecops-app
+  namespace: devsecops
+  labels:
+    app: devsecops-app
+    version: "latest"
+  annotations:
+    # ArgoCD will update this annotation on sync
+    deployment.kubernetes.io/revision: "1"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: devsecops-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0   # Zero-downtime deployments
+  template:
+    metadata:
+      labels:
+        app: devsecops-app
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path:   "/actuator/prometheus"
+        prometheus.io/port:   "8080"
+    spec:
+      serviceAccountName: devsecops-app-sa
+
+      # WHY: Spread pods across nodes for HA
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: devsecops-app
+
+      containers:
+        - name: devsecops-app
+          # Jenkins pipeline updates this image tag on every build
+          image: 545586474227.dkr.ecr.us-east-1.amazonaws.com/devsecops-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+
+          # Load config from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: devsecops-app-config
+
+          resources:
+            requests:
+              cpu:    "250m"
+              memory: "512Mi"
+            limits:
+              cpu:    "1"
+              memory: "1Gi"
+
+          # Liveness probe — restart if app hangs
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 90
+            periodSeconds:       30
+            timeoutSeconds:      10
+            failureThreshold:    3
+
+          # Readiness probe — remove from LB if not ready
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds:       15
+            timeoutSeconds:      5
+            failureThreshold:    3
+
+          # Security context — non-root
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot:  true
+            runAsUser:     1000
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: false
+
+      # WHY: Graceful shutdown — give the app time to finish in-flight requests
+      terminationGracePeriodSeconds: 30
+
+---
+# Service Account for IRSA (EKS IAM role for ECR pull)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: devsecops-app-sa
+  namespace: devsecops
+  annotations:
+    # This ARN is output by Terraform: module.app_irsa.iam_role_arn
+    eks.amazonaws.com/role-arn: arn:aws:iam::545586474227:role/devsecops-app-role

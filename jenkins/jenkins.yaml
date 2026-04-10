@@ -1,0 +1,112 @@
+# ============================================================
+# jenkins.yaml — Jenkins Configuration as Code (JCasC)
+# WHY: Eliminates manual Jenkins UI setup. Entire config is
+#      stored in Git and applied automatically on container start.
+# ============================================================
+
+jenkins:
+  systemMessage: |
+    🚀 DevSecOps Pipeline — Managed by Configuration as Code (JCasC)
+    Do NOT configure Jenkins via UI — changes will be lost on restart!
+
+  numExecutors: 0   # No executors on master; all work runs in Docker agents
+
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          password: "${JENKINS_ADMIN_PASSWORD}"
+
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+  clouds:
+    - docker:
+        name: docker
+        dockerApi:
+          dockerHost:
+            uri: "unix:///var/run/docker.sock"
+        templates:
+          - labelString: "docker-agent"
+            dockerTemplateBase:
+              image: "maven:3.9.6-eclipse-temurin-21"
+              mounts:
+                - type: bind
+                  source: /var/run/docker.sock
+                  target: /var/run/docker.sock
+            remoteFs: "/home/jenkins/agent"
+            connector:
+              attach:
+                user: root
+
+credentials:
+  system:
+    domainCredentials:
+      - domain:
+          name: "Global"
+        credentials:
+          # GitHub Personal Access Token
+          - usernamePassword:
+              scope: GLOBAL
+              id: github-credentials
+              username: "${GIT_USER}"
+              password: "${GIT_TOKEN}"
+              description: "GitHub PAT for repo access"
+
+          # SonarQube token
+          - string:
+              scope: GLOBAL
+              id: sonarqube-token
+              secret: "${SONAR_TOKEN}"
+              description: "SonarQube analysis token"
+
+          # Nexus Maven deployer
+          - usernamePassword:
+              scope: GLOBAL
+              id: nexus-credentials
+              username: "${NEXUS_DEPLOY_USER}"
+              password: "${NEXUS_DEPLOY_PASS}"
+              description: "Nexus Maven deploy credentials"
+
+          # ArgoCD API token
+          - string:
+              scope: GLOBAL
+              id: argocd-token
+              secret: "${ARGOCD_TOKEN}"
+              description: "ArgoCD API token for deployment trigger"
+
+          # Cosign private key (base64 encoded file content)
+          - string:
+              scope: GLOBAL
+              id: cosign-private-key
+              secret: "${COSIGN_PRIVATE_KEY_B64}"
+              description: "Base64-encoded Cosign private key"
+
+unclassified:
+  sonarGlobalConfiguration:
+    buildWrapperEnabled: true
+    installations:
+      - name: SonarQube
+        serverUrl: "${SONAR_HOST_URL}"
+        credentialsId: sonarqube-token
+
+  gitHubPluginConfig:
+    hookUrl: "${JENKINS_URL}/github-webhook/"
+
+  slackNotifier:
+    teamDomain: "${SLACK_TEAM_DOMAIN:-your-workspace}"
+    tokenCredentialId: slack-token
+    room: "#devops-alerts"
+
+tool:
+  maven:
+    installations:
+      - name: Maven
+        home: /usr/share/maven
+
+  jdk:
+    installations:
+      - name: JDK21
+        home: /usr/lib/jvm/java-21-openjdk-amd64

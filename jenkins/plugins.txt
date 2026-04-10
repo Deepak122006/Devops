@@ -1,0 +1,62 @@
+# ============================================================
+# plugins.txt — Jenkins Plugins List
+# WHY: Specifies exact plugins to install so the Jenkins Docker
+#      image is reproducible and matches what the Jenkinsfile needs.
+# Install: jenkins/install-plugins.sh (built into jenkins/jenkins image)
+# ============================================================
+
+# Core Pipeline
+workflow-aggregator
+pipeline-stage-view
+pipeline-graph-analysis
+blueocean
+
+# Source Control
+git
+github
+github-branch-source
+
+# Build Tools
+maven-plugin
+
+# SonarQube Integration
+sonar
+
+# Nexus Integration
+nexus-artifact-uploader
+
+# Docker & Container
+docker-plugin
+docker-workflow
+docker-commons
+
+# AWS
+aws-credentials
+aws-java-sdk
+
+# Kubernetes (for EKS agent support)
+kubernetes
+
+# Credentials Management
+credentials-binding
+credentials
+plain-credentials
+
+# Configuration as Code (JCasC)
+configuration-as-code
+
+# Notifications
+slack
+
+# Security & Auditing
+role-strategy
+audit-trail
+
+# Utilities
+ansicolor
+timestamper
+ws-cleanup
+build-timeout
+throttle-concurrents
+ssh-agent
+job-dsl

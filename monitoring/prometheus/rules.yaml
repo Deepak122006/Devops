@@ -1,0 +1,57 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: devsecops-app-rules
+  namespace: monitoring
+  labels:
+    app:     kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: devsecops-app
+      interval: 30s
+      rules:
+
+        # Alert if app pod count is 0
+        - alert: AppPodsDown
+          expr: kube_deployment_status_replicas_available{deployment="devsecops-app", namespace="devsecops"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary:     "DevSecOps app has 0 running pods"
+            description: "Deployment {{ $labels.deployment }} has no available pods for 1 minute."
+
+        # Alert if pod restarts spike
+        - alert: HighPodRestartRate
+          expr: rate(kube_pod_container_status_restarts_total{namespace="devsecops"}[5m]) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary:     "High pod restart rate in devsecops namespace"
+            description: "Pod {{ $labels.pod }} is restarting frequently."
+
+        # Alert on high CPU
+        - alert: HighCPU
+          expr: |
+            sum(rate(container_cpu_usage_seconds_total{namespace="devsecops",container="devsecops-app"}[5m]))
+            / sum(kube_pod_container_resource_limits{namespace="devsecops",resource="cpu"}) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary:     "High CPU usage in devsecops app"
+            description: "CPU usage is above 85% of limit."
+
+        # Alert on high memory
+        - alert: HighMemory
+          expr: |
+            sum(container_memory_working_set_bytes{namespace="devsecops",container="devsecops-app"})
+            / sum(kube_pod_container_resource_limits{namespace="devsecops",resource="memory"}) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary:     "High memory usage in devsecops app"
+            description: "Memory usage is above 85% of limit."

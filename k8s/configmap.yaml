@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devsecops-app-config
+  namespace: devsecops
+  labels:
+    app: devsecops-app
+data:
+  # Spring Boot application config overrides
+  SPRING_PROFILES_ACTIVE: "production"
+  SERVER_PORT: "8080"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus"
+  MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: "always"
+  LOGGING_LEVEL_ROOT: "INFO"
+  LOGGING_LEVEL_COM_ANTIGRAVITY: "DEBUG"
