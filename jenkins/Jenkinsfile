@@ -45,8 +45,10 @@ pipeline {
                     apt-get update -qq && apt-get install -y -qq curl unzip jq maven
 
                     # Install Docker CLI if missing
+                    # Force remove any old version to ensure new one is fetched
+                    rm -f /usr/local/bin/docker
                     if ! command -v docker &>/dev/null; then
-                        curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz \
+                        curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz \
                           | tar -xz --strip-components=1 -C /usr/local/bin docker/docker
                     fi
 
