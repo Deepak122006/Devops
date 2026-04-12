@@ -110,3 +110,23 @@ tool:
     installations:
       - name: JDK21
         home: /usr/lib/jvm/java-21-openjdk-amd64
+
+jobs:
+  - script: >
+      pipelineJob('DevSecOps-Pipeline') {
+        description('End-to-End DevSecOps CI/CD Pipeline')
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('https://github.com/Deepak122006/Devops.git')
+                  credentials('github-credentials')
+                }
+                branch('*/main')
+              }
+            }
+            scriptPath('jenkins/Jenkinsfile')
+          }
+        }
+      }
