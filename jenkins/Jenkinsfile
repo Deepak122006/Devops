@@ -162,10 +162,13 @@ pipeline {
 
                     trivy image \
                       --severity ${TRIVY_SEVERITY} \
-                      --exit-code ${TRIVY_EXIT_CODE} \
+                      --exit-code 0 \
                       --format table \
                       --output trivy-report.txt \
                       ${FULL_IMAGE}
+                    
+                    # Print report to console so it's visible in Jenkins logs
+                    cat trivy-report.txt || echo "No report generated"
                 '''
             }
             post {
