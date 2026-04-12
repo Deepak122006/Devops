@@ -23,8 +23,7 @@ pipeline {
         LATEST_IMAGE    = "${ECR_REGISTRY}/${APP_NAME}:latest"
 
         // SonarQube
-        SONAR_HOST_URL  = "${env.SONAR_HOST_URL}"
-        SCANNER_HOME    = tool 'SonarQube Scanner'
+        SONAR_HOST_URL  = "${env.SONAR_HOST_URL ?: 'http://sonarqube:9000'}"
 
         // Git
         GIT_REPO        = 'https://github.com/Deepak122006/Devops.git'
