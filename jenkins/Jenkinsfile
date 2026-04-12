@@ -218,7 +218,7 @@ pipeline {
                         # Commit and push
                         git add k8s/deployment.yaml
                         git diff --cached --quiet || git commit -m "ci: update image to ${IMAGE_TAG} [skip ci]"
-                        git push https://${GIT_USER}:${GIT_TOKEN}@github.com/Deepak122006/Devops.git ${GIT_BRANCH}
+                        git push https://${GIT_USER}:${GIT_TOKEN}@github.com/Deepak122006/Devops.git HEAD:${GIT_BRANCH}
 
                         echo "✅ Manifest updated — ArgoCD will auto-sync within 3 min"
                     '''
