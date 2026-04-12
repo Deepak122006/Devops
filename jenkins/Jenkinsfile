@@ -5,12 +5,7 @@
 // ============================================================
 
 pipeline {
-    agent {
-        docker {
-            image 'maven:3.9.6-eclipse-temurin-21'
-            args  '-v /var/run/docker.sock:/var/run/docker.sock -u root'
-        }
-    }
+    agent any
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
@@ -42,23 +37,27 @@ pipeline {
 
     stages {
 
-        stage('Checkout & Setup Agent') {
+        stage('Checkout & Setup Tools') {
             steps {
                 checkout scm
                 echo "✅ Checked out branch: ${GIT_BRANCH} | Commit: ${GIT_COMMIT.take(7)}"
                 sh '''
-                    echo "🔧 Installing required CLI tools into Jenkins Agent..."
-                    apt-get update && apt-get install -y curl unzip jq
-                    # Install Docker CLI
+                    echo "🔧 Installing required tools..."
+                    apt-get update -qq && apt-get install -y -qq curl unzip jq maven
+
+                    # Install Docker CLI if missing
                     if ! command -v docker &>/dev/null; then
-                        curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz | tar zx
-                        mv docker/docker /usr/local/bin/
+                        curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz \
+                          | tar -xz --strip-components=1 -C /usr/local/bin docker/docker
                     fi
-                    # Install AWS CLI
+
+                    # Install AWS CLI if missing
                     if ! command -v aws &>/dev/null; then
-                        curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
                         unzip -q awscliv2.zip && ./aws/install && rm -rf aws awscliv2.zip
                     fi
+
+                    echo "✅ Tools ready: $(docker --version), $(aws --version), $(mvn -v | head -1)"
                 '''
             }
         }
@@ -285,7 +284,7 @@ pipeline {
             echo "❌ Pipeline failed."
         }
         always {
-            deleteDir()
+            echo '🧹 Cleaning up workspace...'
         }
     }
 }
