@@ -13,8 +13,6 @@ pipeline {
     }
 
     options {
-        timestamps()
-        ansiColor('xterm')
         buildDiscarder(logRotator(numToKeepStr: '10'))
         timeout(time: 60, unit: 'MINUTES')
     }
@@ -34,7 +32,7 @@ pipeline {
         SCANNER_HOME    = tool 'SonarQube Scanner'
 
         // Git
-        GIT_REPO        = 'https://github.com/IdrisShaik/Devops_Project.git'
+        GIT_REPO        = 'https://github.com/Deepak122006/Devops.git'
         GIT_BRANCH      = 'main'
 
         // Trivy thresholds
@@ -44,11 +42,24 @@ pipeline {
 
     stages {
 
-        // ── Stage 1: Checkout ──────────────────────────────
-        stage('Checkout') {
+        stage('Checkout & Setup Agent') {
             steps {
                 checkout scm
                 echo "✅ Checked out branch: ${GIT_BRANCH} | Commit: ${GIT_COMMIT.take(7)}"
+                sh '''
+                    echo "🔧 Installing required CLI tools into Jenkins Agent..."
+                    apt-get update && apt-get install -y curl unzip jq
+                    # Install Docker CLI
+                    if ! command -v docker &>/dev/null; then
+                        curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz | tar zx
+                        mv docker/docker /usr/local/bin/
+                    fi
+                    # Install AWS CLI
+                    if ! command -v aws &>/dev/null; then
+                        curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                        unzip -q awscliv2.zip && ./aws/install && rm -rf aws awscliv2.zip
+                    fi
+                '''
             }
         }
 
@@ -256,7 +267,7 @@ pipeline {
                         # Commit and push
                         git add k8s/deployment.yaml
                         git commit -m "ci: update image to ${IMAGE_TAG} [skip ci]"
-                        git push https://${GIT_USER}:${GIT_TOKEN}@github.com/IdrisShaik/Devops_Project.git ${GIT_BRANCH}
+                        git push https://${GIT_USER}:${GIT_TOKEN}@github.com/Deepak122006/Devops.git ${GIT_BRANCH}
 
                         echo "✅ Manifest updated — ArgoCD will auto-sync within 3 min"
                     '''
@@ -269,25 +280,12 @@ pipeline {
     post {
         success {
             echo "🎉 Pipeline succeeded! Image: ${FULL_IMAGE}"
-            slackSend(
-                color: 'good',
-                message: """✅ *Build #${BUILD_NUMBER} SUCCEEDED*
-Branch: `${GIT_BRANCH}` | Commit: `${GIT_COMMIT.take(7)}`
-Image: `${FULL_IMAGE}`
-<${BUILD_URL}|View Build>"""
-            )
         }
         failure {
             echo "❌ Pipeline failed."
-            slackSend(
-                color: 'danger',
-                message: """❌ *Build #${BUILD_NUMBER} FAILED*
-Branch: `${GIT_BRANCH}` | Commit: `${GIT_COMMIT.take(7)}`
-<${BUILD_URL}|View Build>"""
-            )
         }
         always {
-            cleanWs()
+            deleteDir()
         }
     }
 }
