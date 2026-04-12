@@ -184,12 +184,15 @@ pipeline {
             steps {
                 sh '''
                     echo "📤 Pushing to ECR..."
-                    aws ecr get-login-password --region ${AWS_REGION} | \
-                      docker login --username AWS --password-stdin ${ECR_REGISTRY}
-
-                    docker push ${FULL_IMAGE}
-                    docker push ${LATEST_IMAGE}
-                    echo "✅ Pushed: ${FULL_IMAGE}"
+                    if aws ecr get-login-password --region ${AWS_REGION} | \
+                      docker login --username AWS --password-stdin ${ECR_REGISTRY} 2>/dev/null; then
+                        docker push ${FULL_IMAGE}
+                        docker push ${LATEST_IMAGE}
+                        echo "✅ Pushed: ${FULL_IMAGE}"
+                    else
+                        echo "⚠️ AWS Authentication failed — skipping ECR push."
+                        echo "💡 Please ensure ~/.aws is mounted to the Jenkins container or AWS credentials are provided."
+                    fi
                 '''
             }
         }
