@@ -4,8 +4,6 @@
 # Usage: docker compose --env-file ../.env -f docker-compose.yml up -d
 # ============================================================
 
-version: "3.9"
-
 networks:
   ci-network:
     driver: bridge
@@ -49,7 +47,7 @@ services:
       SLACK_TOKEN:            ${SLACK_TOKEN:-placeholder}
       COSIGN_PRIVATE_KEY_B64: ${COSIGN_PRIVATE_KEY_B64:-placeholder}
     ports:
-      - "8080:8080"     # Jenkins Web UI
+      - "8090:8080"     # Jenkins Web UI (8090 on host -> 8080 in container)
       - "50000:50000"   # Agent JNLP
     volumes:
       - jenkins_home:/var/jenkins_home
@@ -101,9 +99,9 @@ services:
     ports:
       - "9000:9000"
     volumes:
-      - sonarqube_data:       /opt/sonarqube/data
-      - sonarqube_logs:       /opt/sonarqube/logs
-      - sonarqube_extensions: /opt/sonarqube/extensions
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_logs:/opt/sonarqube/logs
+      - sonarqube_extensions:/opt/sonarqube/extensions
     networks:
       - ci-network
     ulimits:

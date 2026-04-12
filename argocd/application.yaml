@@ -13,7 +13,7 @@ spec:
   project: devsecops
 
   source:
-    repoURL:        https://github.com/IdrisShaik/Devops_Project.git
+    repoURL:        https://github.com/Deepak122006/Devops.git
     targetRevision: main
     path:           k8s   # ArgoCD watches the k8s/ folder
 
@@ -30,11 +30,9 @@ spec:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground
       - ApplyOutOfSyncOnly=true
-
-  # Retry on failure — tolerates transient issues (network, throttling)
-  retry:
-    limit: 5
-    backoff:
-      duration:    5s
-      factor:      2
-      maxDuration: 3m
+    retry:
+      limit: 5
+      backoff:
+        duration:    5s
+        factor:      2
+        maxDuration: 3m

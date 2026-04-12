@@ -21,14 +21,14 @@ spec:
       resource:
         name: cpu
         target:
-          type:               AverageUtilization
+          type:               Utilization
           averageUtilization: 70
     # Scale when Memory > 80%
     - type: Resource
       resource:
         name: memory
         target:
-          type:               AverageUtilization
+          type:               Utilization
           averageUtilization: 80
   behavior:
     scaleUp:
