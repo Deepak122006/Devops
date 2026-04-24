@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // Jenkinsfile â€” DevSecOps CI/CD Pipeline
 // Flow: Checkout â†’ Build â†’ Test â†’ SonarQube â†’ Nexus â†’ Docker
 //       â†’ Trivy Scan â†’ Cosign Sign â†’ ECR Push â†’ ArgoCD Deploy
@@ -160,12 +160,11 @@ pipeline {
 
                     if [ ! -f "${TRIVY_DIR}/trivy" ]; then
                         echo "Downloading Trivy v0.52.2 binary..."
-                        # Direct release binary (avoids raw.githubusercontent.com network issues)
+                        curl -fsSL \
                           "https://github.com/aquasecurity/trivy/releases/download/v0.52.2/trivy_0.52.2_Linux-64bit.tar.gz" \
-                          -o /tmp/trivy.tar.gz && \
-                          -o /tmp/trivy.tar.gz && \
-                        tar -xzf /tmp/trivy.tar.gz -C "${TRIVY_DIR}" trivy && \
-                        rm -f /tmp/trivy.tar.gz || {
+                          -o /tmp/trivy.tar.gz \
+                        && tar -xzf /tmp/trivy.tar.gz -C "${TRIVY_DIR}" trivy \
+                        && rm -f /tmp/trivy.tar.gz || {
                             echo "âš ï¸ Trivy download failed (network issue) â€” skipping scan"
                             exit 0
                         }
