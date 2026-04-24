@@ -47,7 +47,7 @@ spec:
       containers:
         - name: devsecops-app
           # Jenkins pipeline updates this image tag on every build
-          image: 545586474227.dkr.ecr.us-east-1.amazonaws.com/devsecops-app:16-e86bec9
+          image: 545586474227.dkr.ecr.us-east-1.amazonaws.com/devsecops-app:17-bc75250
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
