@@ -1,7 +1,7 @@
-// ============================================================
-// Jenkinsfile — DevSecOps CI/CD Pipeline
-// Flow: Checkout → Build → Test → SonarQube → Nexus → Docker
-//       → Trivy Scan → Cosign Sign → ECR Push → ArgoCD Deploy
+﻿// ============================================================
+// Jenkinsfile â€” DevSecOps CI/CD Pipeline
+// Flow: Checkout â†’ Build â†’ Test â†’ SonarQube â†’ Nexus â†’ Docker
+//       â†’ Trivy Scan â†’ Cosign Sign â†’ ECR Push â†’ ArgoCD Deploy
 // ============================================================
 
 pipeline {
@@ -39,9 +39,9 @@ pipeline {
         stage('Checkout & Setup Tools') {
             steps {
                 checkout scm
-                echo "✅ Checked out branch: ${GIT_BRANCH} | Commit: ${GIT_COMMIT.take(7)}"
+                echo "âœ… Checked out branch: ${GIT_BRANCH} | Commit: ${GIT_COMMIT.take(7)}"
                 sh '''
-                    echo "🔧 Installing required tools..."
+                    echo "ðŸ”§ Installing required tools..."
                     apt-get update -qq && apt-get install -y -qq curl unzip jq maven
 
                     # Install Docker CLI if missing
@@ -58,19 +58,19 @@ pipeline {
                         unzip -q awscliv2.zip && ./aws/install && rm -rf aws awscliv2.zip
                     fi
 
-                    echo "✅ Tools ready: $(docker --version), $(aws --version), $(mvn -v | head -1)"
+                    echo "âœ… Tools ready: $(docker --version), $(aws --version), $(mvn -v | head -1)"
                 '''
             }
         }
 
-        // ── Stage 2: Maven Build ───────────────────────────
+        // â”€â”€ Stage 2: Maven Build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         stage('Build') {
             steps {
                 dir('app') {
                     sh '''
-                        echo "🔨 Building Spring Boot application..."
+                        echo "ðŸ”¨ Building Spring Boot application..."
                         mvn clean package -DskipTests -B --no-transfer-progress
-                        echo "✅ Build complete: $(ls target/*.jar)"
+                        echo "âœ… Build complete: $(ls target/*.jar)"
                     '''
                 }
             }
@@ -81,7 +81,7 @@ pipeline {
             }
         }
 
-        // ── Stage 3: Unit Tests + JaCoCo Coverage ─────────
+        // â”€â”€ Stage 3: Unit Tests + JaCoCo Coverage â”€â”€â”€â”€â”€â”€â”€â”€â”€
         stage('Unit Tests') {
             steps {
                 dir('app') {
@@ -90,91 +90,91 @@ pipeline {
             }
             post {
                 always {
-                    echo '✅ Tests completed — 8/8 passed'
+                    echo 'âœ… Tests completed â€” 8/8 passed'
                 }
             }
         }
 
-        // ── Stage 4: SonarQube Analysis ─────────────────
+        // â”€â”€ Stage 4: SonarQube Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         stage('SonarQube Analysis') {
             steps {
                 dir('app') {
                     sh '''
-                        echo "🔍 Running SonarQube analysis..."
+                        echo "ðŸ” Running SonarQube analysis..."
                         mvn sonar:sonar \
                           -Dsonar.projectKey=devsecops-app \
                           -Dsonar.projectName="DevSecOps App" \
                           -Dsonar.host.url=http://sonarqube:9000 \
                           -Dsonar.token=${SONAR_TOKEN} \
-                          -B --no-transfer-progress || echo "⚠️ SonarQube not reachable — skipping"
-                        echo "✅ SonarQube analysis complete"
+                          -B --no-transfer-progress || echo "âš ï¸ SonarQube not reachable â€” skipping"
+                        echo "âœ… SonarQube analysis complete"
                     '''
                 }
             }
         }
 
-        // ── Stage 5: Quality Gate ──────────────────────
+        // â”€â”€ Stage 5: Quality Gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         stage('Quality Gate') {
             steps {
-                echo '🔰 Quality Gate: SonarQube analysis submitted. Proceeding (webhook not configured in this env).'
+                echo 'ðŸ”° Quality Gate: SonarQube analysis submitted. Proceeding (webhook not configured in this env).'
             }
         }
 
-        // ── Stage 6: Publish to Nexus ──────────────────────
+        // â”€â”€ Stage 6: Publish to Nexus â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         stage('Publish to Nexus') {
             steps {
                 dir('app') {
                     sh '''
-                        echo "📦 Deploying to Nexus..."
+                        echo "ðŸ“¦ Deploying to Nexus..."
                         mvn deploy -DskipTests -B --no-transfer-progress \
                           -Dusername=${NEXUS_DEPLOY_USER} \
                           -Dpassword=${NEXUS_DEPLOY_PASS} \
-                          || echo "⚠️ Nexus deploy skipped (server may not be reachable)"
-                        echo "✅ Nexus stage complete"
+                          || echo "âš ï¸ Nexus deploy skipped (server may not be reachable)"
+                        echo "âœ… Nexus stage complete"
                     '''
                 }
             }
         }
 
-        // ── Stage 7: Build Docker Image ───────────────────
+        // â”€â”€ Stage 7: Build Docker Image â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         stage('Docker Build') {
             steps {
                 sh '''
-                    echo "🐳 Building Docker image: ${FULL_IMAGE}"
+                    echo "ðŸ³ Building Docker image: ${FULL_IMAGE}"
                     docker build \
                       -t ${FULL_IMAGE} \
                       -t ${LATEST_IMAGE} \
                       -f app/Dockerfile app/
-                    echo "✅ Docker image built"
+                    echo "âœ… Docker image built"
                 '''
             }
         }
 
-        // ── Stage 8: Trivy Security Scan ──────────────────────────────────
+        // â”€â”€ Stage 8: Trivy Security Scan â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         stage('Trivy Scan') {
             steps {
                 sh '''
-                    echo "🔍 Setting up Trivy..."
+                    echo "ðŸ” Setting up Trivy..."
                     TRIVY_DIR="/tmp/trivy-bin"
                     mkdir -p "${TRIVY_DIR}"
 
                     if [ ! -f "${TRIVY_DIR}/trivy" ]; then
-                        echo "Downloading Trivy v0.50.4 binary..."
+                        echo "Downloading Trivy v0.52.2 binary..."
                         # Direct release binary (avoids raw.githubusercontent.com network issues)
-                        curl -fsSL \
-                          "https://github.com/aquasecurity/trivy/releases/download/v0.50.4/trivy_0.50.4_Linux-64bit.tar.gz" \
+                          "https://github.com/aquasecurity/trivy/releases/download/v0.52.2/trivy_0.52.2_Linux-64bit.tar.gz" \
+                          -o /tmp/trivy.tar.gz && \
                           -o /tmp/trivy.tar.gz && \
                         tar -xzf /tmp/trivy.tar.gz -C "${TRIVY_DIR}" trivy && \
                         rm -f /tmp/trivy.tar.gz || {
-                            echo "⚠️ Trivy download failed (network issue) — skipping scan"
+                            echo "âš ï¸ Trivy download failed (network issue) â€” skipping scan"
                             exit 0
                         }
                     fi
 
                     export PATH="${TRIVY_DIR}:${PATH}"
-                    echo "✅ Trivy $(trivy --version | head -1) ready"
+                    echo "âœ… Trivy $(trivy --version | head -1) ready"
 
-                    echo "🔍 Scanning image: ${FULL_IMAGE}"
+                    echo "ðŸ” Scanning image: ${FULL_IMAGE}"
                     trivy image \
                       --severity ${TRIVY_SEVERITY} \
                       --exit-code 0 \
@@ -182,7 +182,7 @@ pipeline {
                       --output trivy-report.json \
                       --no-progress \
                       ${FULL_IMAGE} || true
-                    echo "✅ Trivy scan complete — check trivy-report.json for results"
+                    echo "âœ… Trivy scan complete â€” check trivy-report.json for results"
                 '''
             }
             post {
@@ -193,7 +193,26 @@ pipeline {
         }
 
 
-        // ── Stage 9: Cosign Image Signing ─────────────────
+        // â”€â”€ Stage 10: Push to ECR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        stage('Push to ECR') {
+            steps {
+                sh '''
+                    echo "ðŸ“¤ Pushing to ECR..."
+                    if aws ecr get-login-password --region ${AWS_REGION} | \
+                      docker login --username AWS --password-stdin ${ECR_REGISTRY} 2>/dev/null; then
+                        docker push ${FULL_IMAGE}
+                        docker push ${LATEST_IMAGE}
+                        echo "âœ… Pushed: ${FULL_IMAGE}"
+                    else
+                        echo "âš ï¸ AWS Authentication failed â€” skipping ECR push."
+                        echo "ðŸ’¡ Please ensure ~/.aws is mounted to the Jenkins container or AWS credentials are provided."
+                    fi
+                '''
+            }
+        }
+
+
+        // â”€â”€ Stage 9: Cosign Image Signing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         stage('Sign Image') {
             steps {
                 withCredentials([
@@ -201,7 +220,7 @@ pipeline {
                     string(credentialsId: 'cosign-password',    variable: 'COSIGN_PASS')
                 ]) {
                     sh '''
-                        echo "✍️ Installing cosign..."
+                        echo "âœï¸ Installing cosign..."
                         COSIGN_BIN="/tmp/trivy-bin/cosign"
                         if [ ! -f "${COSIGN_BIN}" ]; then
                             curl -fsSL https://github.com/sigstore/cosign/releases/download/v2.2.4/cosign-linux-amd64 \
@@ -210,7 +229,7 @@ pipeline {
                         fi
                         export PATH="/tmp/trivy-bin:${PATH}"
 
-                        echo "✍️ Signing image: ${FULL_IMAGE}"
+                        echo "âœï¸ Signing image: ${FULL_IMAGE}"
                         # Write key to a secure temp file
                         KEY_FILE=$(mktemp /tmp/cosign-XXXXXX.key)
                         echo "${COSIGN_KEY_B64}" | base64 -d > "${KEY_FILE}"
@@ -222,31 +241,13 @@ pipeline {
 
                         # Remove key from disk immediately after signing
                         rm -f "${KEY_FILE}"
-                        echo "✅ Image signed and key removed from disk"
+                        echo "âœ… Image signed and key removed from disk"
                     '''
                 }
             }
         }
 
-        // ── Stage 10: Push to ECR ─────────────────────────
-        stage('Push to ECR') {
-            steps {
-                sh '''
-                    echo "📤 Pushing to ECR..."
-                    if aws ecr get-login-password --region ${AWS_REGION} | \
-                      docker login --username AWS --password-stdin ${ECR_REGISTRY} 2>/dev/null; then
-                        docker push ${FULL_IMAGE}
-                        docker push ${LATEST_IMAGE}
-                        echo "✅ Pushed: ${FULL_IMAGE}"
-                    else
-                        echo "⚠️ AWS Authentication failed — skipping ECR push."
-                        echo "💡 Please ensure ~/.aws is mounted to the Jenkins container or AWS credentials are provided."
-                    fi
-                '''
-            }
-        }
-
-        // ── Stage 11: Update K8s Manifest & Trigger ArgoCD
+        // â”€â”€ Stage 11: Update K8s Manifest & Trigger ArgoCD
         stage('Update Manifest & Deploy') {
             steps {
                 withCredentials([
@@ -257,7 +258,7 @@ pipeline {
                     )
                 ]) {
                     sh '''
-                        echo "📝 Updating k8s/deployment.yaml with new image tag..."
+                        echo "ðŸ“ Updating k8s/deployment.yaml with new image tag..."
                         git config --global user.email "jenkins@devsecops.local"
                         git config --global user.name "Jenkins CI"
 
@@ -269,7 +270,7 @@ pipeline {
                         git diff --cached --quiet || git commit -m "ci: update image to ${IMAGE_TAG} [skip ci]"
                         git push https://${GIT_USER}:${GIT_TOKEN}@github.com/Deepak122006/Devops.git HEAD:${GIT_BRANCH}
 
-                        echo "✅ Manifest updated — ArgoCD will auto-sync within 3 min"
+                        echo "âœ… Manifest updated â€” ArgoCD will auto-sync within 3 min"
                     '''
                 }
             }
@@ -279,13 +280,13 @@ pipeline {
 
     post {
         success {
-            echo "🎉 Pipeline succeeded! Image: ${FULL_IMAGE}"
+            echo "ðŸŽ‰ Pipeline succeeded! Image: ${FULL_IMAGE}"
         }
         failure {
-            echo "❌ Pipeline failed."
+            echo "âŒ Pipeline failed."
         }
         always {
-            echo '🧹 Cleaning up workspace...'
+            echo 'ðŸ§¹ Cleaning up workspace...'
         }
     }
 }
