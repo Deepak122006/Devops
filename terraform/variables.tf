@@ -25,7 +25,7 @@ variable "eks_cluster_name" {
 variable "eks_cluster_version" {
   description = "Kubernetes version for EKS"
   type        = string
-  default     = "1.29"
+  default     = "1.34"
 }
 
 variable "eks_node_instance_type" {
@@ -55,7 +55,20 @@ variable "eks_node_desired_size" {
 variable "ubuntu_ami_id" {
   description = "AMI ID for Ubuntu 22.04 LTS (update per region)"
   type        = string
-  default     = "ami-0c7217cdde317cfec"  # us-east-1 Ubuntu 22.04
+  default     = "ami-0c7217cdde317cfec" # us-east-1 Ubuntu 22.04
+}
+
+variable "ci_instance_type" {
+  description = "EC2 instance type for the CI server running Jenkins, SonarQube, and Nexus"
+  type        = string
+  default     = "t3.large"
+}
+
+variable "admin_cidr_blocks" {
+  description = "CIDR blocks allowed to reach SSH, CI web tools, and the public EKS API endpoint. MUST be set to your real IP(s) - never 0.0.0.0/0 in production."
+  type        = list(string)
+  # No default — must be set explicitly in terraform.tfvars
+  # Example: admin_cidr_blocks = ["YOUR_PUBLIC_IP/32"]
 }
 
 variable "ssh_public_key" {

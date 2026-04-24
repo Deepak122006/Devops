@@ -154,16 +154,30 @@ pipeline {
         stage('Trivy Scan') {
             steps {
                 sh '''
-                    echo "🔍 Trivy scan: Skipping — GitHub releases not reachable from this network"
-                    echo "⚠️  Security scanning will be performed in a follow-up step"
-                    echo "✅ Trivy stage complete"
-                    # Create empty report so archive doesn't fail
-                    echo "Trivy scan skipped" > trivy-report.txt
+                    echo "🔍 Installing Trivy..."
+                    if ! command -v trivy &>/dev/null; then
+                        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+                          | sh -s -- -b /usr/local/bin v0.50.4
+                    fi
+                    echo "✅ Trivy $(trivy --version | head -1) installed"
+
+                    echo "🔍 Scanning image: ${FULL_IMAGE}"
+                    trivy image \
+                      --severity ${TRIVY_SEVERITY} \
+                      --exit-code ${TRIVY_EXIT_CODE} \
+                      --format json \
+                      --output trivy-report.json \
+                      --no-progress \
+                      ${FULL_IMAGE} || {
+                        echo "❌ Trivy found CRITICAL/HIGH vulnerabilities — see trivy-report.json"
+                        exit 1
+                    }
+                    echo "✅ Trivy scan passed — no CRITICAL/HIGH vulnerabilities found"
                 '''
             }
             post {
                 always {
-                    archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'trivy-report.json', allowEmptyArchive: true
                 }
             }
         }
@@ -171,11 +185,33 @@ pipeline {
         // ── Stage 9: Cosign Image Signing ─────────────────
         stage('Sign Image') {
             steps {
-                sh '''
-                    echo "✍️ Cosign signing: Skipping — cosign credentials not configured in this env"
-                    echo "⚠️  Image signing will be enabled once cosign-private-key credential is added to Jenkins"
-                    echo "✅ Sign stage complete"
-                '''
+                withCredentials([
+                    string(credentialsId: 'cosign-private-key', variable: 'COSIGN_KEY_B64'),
+                    string(credentialsId: 'cosign-password',    variable: 'COSIGN_PASS')
+                ]) {
+                    sh '''
+                        echo "✍️ Installing cosign..."
+                        if ! command -v cosign &>/dev/null; then
+                            curl -fsSL https://github.com/sigstore/cosign/releases/download/v2.2.4/cosign-linux-amd64 \
+                              -o /usr/local/bin/cosign
+                            chmod +x /usr/local/bin/cosign
+                        fi
+
+                        echo "✍️ Signing image: ${FULL_IMAGE}"
+                        # Write key to a secure temp file
+                        KEY_FILE=$(mktemp /tmp/cosign-XXXXXX.key)
+                        echo "${COSIGN_KEY_B64}" | base64 -d > "${KEY_FILE}"
+
+                        COSIGN_PASSWORD="${COSIGN_PASS}" cosign sign \
+                          --key "${KEY_FILE}" \
+                          --yes \
+                          ${FULL_IMAGE}
+
+                        # Remove key from disk immediately after signing
+                        rm -f "${KEY_FILE}"
+                        echo "✅ Image signed and key removed from disk"
+                    '''
+                }
             }
         }
 
